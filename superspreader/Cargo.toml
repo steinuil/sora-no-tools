@@ -1,0 +1,17 @@
+[package]
+authors = ["steinuil <steenuil.owl@gmail.com>"]
+edition = "2018"
+name = "superspreader"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.33"
+futures = "0.3"
+hyper = {version = "0.14", features = ["server", "http1", "stream", "runtime"]}
+log = "0.4"
+# Needed until https://github.com/aatxe/irc/pull/222 gets upstreamed
+irc = {git = "https://github.com/udoprog/irc", rev = "def1442e5e3a154103959346aba7bb137786e45a"}
+simple_logger = "1.11"
+tokio = {version = "1.0", features = ["full"]}
