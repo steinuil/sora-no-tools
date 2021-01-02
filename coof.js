@@ -170,12 +170,14 @@ function toggle_danmaku() {
     comments = [];
     overlay.data = "";
     overlay.update();
+    mp.commandv("show-text", "Danmaku chat disabled");
   } else {
     danmaku_timer = setInterval(update_danmaku, ONE_FRAME_MS);
+    mp.commandv("show-text", "Danmaku chat enabled");
   }
 }
 
-mp.add_key_binding('Ctrl+d', "toggle-danmaku", toggle_danmaku);
+mp.add_key_binding("Ctrl+d", "toggle-danmaku", toggle_danmaku);
 
 mp.register_script_message("danmaku-message", function (msg) {
   if (!danmaku_timer) return;
