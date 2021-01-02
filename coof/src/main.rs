@@ -71,7 +71,8 @@ async fn main() {
         if let Ok(message) = String::from_utf8(chunk.to_vec()) {
             let cmd = json!({
                 "command": [
-                    "script-message",
+                    "script-message-to",
+                    "coof",
                     "danmaku-message",
                     &message
                 ]

@@ -1,4 +1,5 @@
 var ONE_FRAME = 1 / 60;
+var ONE_FRAME_MS = 1000 / 60;
 
 var last_time;
 
@@ -158,13 +159,28 @@ function update_danmaku() {
 var danmaku_timer;
 
 mp.register_event("video-reconfig", function () {
-  if (danmaku_timer !== undefined) return;
-  danmaku_timer = setInterval(update_danmaku, 1000 / 60);
+  if (danmaku_timer) return;
+  danmaku_timer = setInterval(update_danmaku, ONE_FRAME_MS);
 });
 
-mp.register_script_message("danmaku-message", function (msg) {
-  // TODO decide the speed based on the length of the line
+function toggle_danmaku() {
+  if (danmaku_timer) {
+    clearInterval(danmaku_timer);
+    danmaku_timer = undefined;
+    comments = [];
+    overlay.data = "";
+    overlay.update();
+  } else {
+    danmaku_timer = setInterval(update_danmaku, ONE_FRAME_MS);
+  }
+}
 
+mp.add_key_binding('Ctrl+d', "toggle-danmaku", toggle_danmaku);
+
+mp.register_script_message("danmaku-message", function (msg) {
+  if (!danmaku_timer) return;
+
+  // TODO decide the speed based on the length of the line
   comments.push({
     text: irc_formatting_to_ass_tags(msg),
     x: mp.get_property("dwidth"),
