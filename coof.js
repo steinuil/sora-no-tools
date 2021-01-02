@@ -7,8 +7,10 @@ var overlay = mp.create_osd_overlay("ass-events");
 
 var comments = [];
 
-var CHAR_WIDTH = 50;
-var LINE_HEIGHT = 50;
+var FONT_SIZE = 30;
+
+var CHAR_WIDTH = FONT_SIZE;
+var LINE_HEIGHT = FONT_SIZE;
 
 var IRC_COLOR_TO_HEX_BGR = [
   "FFFFFF", // white
@@ -48,7 +50,7 @@ function irc_color_to_hex_bgr(color) {
 }
 
 function irc_formatting_to_ass_tags(msg) {
-  var out = "";
+  var out = "{\\q2\\fs" + FONT_SIZE + "}";
 
   for (var i = 0; i < msg.length; i++) {
     switch (msg.charCodeAt(i)) {
@@ -79,7 +81,7 @@ function irc_formatting_to_ass_tags(msg) {
         }
         break;
       case 0x0f: // reset
-        out = out + "{\\r}";
+        out = out + "{\\r\\q2\\fs" + FONT_SIZE + "}";
         break;
       case 0x11: // monospace
       case 0x04: // hex color
