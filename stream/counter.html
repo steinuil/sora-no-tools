@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sora no Woto anniversary stream</title>
+    <link rel="icon" type="image/svg+xml" href="//wotos.eu/favicon.svg" />
+    <style>
+      * {
+        border: 0;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html {
+        font-size: 20px;
+      }
+
+      @media (max-width: 1200px) {
+        html {
+          font-size: 16px;
+        }
+      }
+
+      @media (max-width: 900px) {
+        html {
+          font-size: 14px;
+        }
+      }
+
+      @media (max-width: 900px) {
+        html {
+          font-size: 10px;
+        }
+      }
+
+      body {
+        background-image: url(//stream.wotos.eu/snw_bg.jpg);
+        background-size: cover;
+        display: flex;
+        min-height: 100vh;
+        position: relative;
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        color: white;
+
+        font-family: serif;
+      }
+
+      .content {
+        text-align: center;
+        text-shadow: 0 0 2px black;
+        padding: 10px;
+        padding-bottom: 30px;
+      }
+
+      .see-you {
+        font-size: 2.8rem;
+        font-weight: bold;
+        margin-bottom: 0.8rem;
+      }
+
+      .date-utc {
+        font-size: 3.5rem;
+        font-weight: bold;
+      }
+
+      .date-local {
+        display: block;
+        color: white;
+        margin-bottom: 1rem;
+        font-size: calc(max(1rem, 16px));
+      }
+
+      .counter-container {
+        font-size: 1.6rem;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="content">
+      <div class="see-you">See you on</div>
+      <div class="date-utc">
+        <span id="date-utc">enable javascript, you baka</span>
+      </div>
+      <a class="date-local" id="date-local-container">
+        (<span id="date-local"></span> in your timezone.)
+      </a>
+      <div class="counter-container">
+        - <span class="counter" id="counter"></span> remain -
+      </div>
+    </div>
+    <script>
+      var AIRING_YEAR = 2010;
+      var STREAM_HOUR = 20;
+
+      function firstSaturdayOfTheYear(year) {
+        var firstOfTheYear = new Date(Date.UTC(year, 0, 1)).getUTCDay();
+
+        // Skip the 1st of December
+        if (firstOfTheYear === 6) {
+          return new Date(Date.UTC(year, 0, 8));
+        }
+
+        return new Date(Date.UTC(year, 0, 1 + (6 - firstOfTheYear)));
+      }
+
+      function findStreamDateOn(year) {
+        var date = firstSaturdayOfTheYear(year);
+
+        return new Date(
+          Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth(),
+            date.getUTCDate(),
+            STREAM_HOUR
+          )
+        );
+      }
+
+      function findNextStreamDate() {
+        var thisYears = firstSaturdayOfTheYear(new Date().getFullYear());
+
+        var date =
+          new Date() < thisYears
+            ? thisYears
+            : firstSaturdayOfTheYear(new Date().getFullYear() + 1);
+
+        return new Date(
+          Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth(),
+            date.getUTCDate(),
+            STREAM_HOUR
+          )
+        );
+      }
+
+      function getAnniversary(date) {
+        return date.getFullYear() - AIRING_YEAR;
+      }
+
+      function padLeft(str, n, chr) {
+        for (var i = str.length; i < n; i++) {
+          str = chr + str;
+        }
+        return str;
+      }
+
+      var MONTHS = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+
+      function formatOrdinal(n) {
+        if (n >= 11 && n <= 13) return n.toString() + "th";
+        switch (n % 10) {
+          case 1:
+            return n.toString() + "st";
+          case 2:
+            return n.toString() + "nd";
+          case 3:
+            return n.toString() + "rd";
+          default:
+            return n.toString() + "th";
+        }
+      }
+
+      function formatDateUTC(date) {
+        return (
+          MONTHS[date.getUTCMonth()] +
+          " " +
+          formatOrdinal(date.getUTCDate()) +
+          ", " +
+          date.getUTCFullYear().toString() +
+          " at " +
+          padLeft(date.getUTCHours().toString(), 2, "0") +
+          ":" +
+          padLeft(date.getUTCMinutes().toString(), 2, "0") +
+          " UTC"
+        );
+      }
+
+      function formatDate(date) {
+        return (
+          MONTHS[date.getMonth()] +
+          " " +
+          formatOrdinal(date.getDate()) +
+          ", " +
+          date.getFullYear().toString() +
+          " at " +
+          padLeft(date.getHours().toString(), 2, "0") +
+          ":" +
+          padLeft(date.getMinutes().toString(), 2, "0")
+        );
+      }
+
+      function s(n, unit) {
+        if (n < 1) return "";
+        if (n === 1) return n.toString() + " " + unit;
+        return n.toString() + " " + unit + "s";
+      }
+
+      function joinAnd(arr) {
+        var out = "";
+
+        if (arr.length === 1) return arr[0];
+
+        return (
+          arr.slice(0, arr.length - 1).join(", ") +
+          " and " +
+          arr[arr.length - 1]
+        );
+      }
+
+      var ONE_SECOND = 1000;
+      var ONE_MINUTE = ONE_SECOND * 60;
+      var ONE_HOUR = ONE_MINUTE * 60;
+      var ONE_DAY = ONE_HOUR * 24;
+
+      function elapsed(date) {
+        var diff = date.getTime() - Date.now();
+
+        var days = Math.floor(diff / ONE_DAY);
+        var hours = Math.floor((diff - days * ONE_DAY) / ONE_HOUR);
+        var minutes = Math.floor(
+          (diff - days * ONE_DAY - hours * ONE_HOUR) / ONE_MINUTE
+        );
+        var seconds = Math.floor(
+          (diff - days * ONE_DAY - hours * ONE_HOUR - minutes * ONE_MINUTE) /
+            ONE_SECOND
+        );
+
+        var out = [];
+
+        if (days > 0) out.push(s(days, "day"));
+        if (hours > 0) out.push(s(hours, "hour"));
+        if (minutes > 0) out.push(s(minutes, "minute"));
+        if (seconds > 0) out.push(s(seconds, "second"));
+
+        return joinAnd(out);
+      }
+
+      function formatDateICS(date) {
+        return (
+          date.getUTCFullYear().toString() +
+          padLeft(date.getUTCMonth().toString() + 1, 2, "0") +
+          padLeft(date.getUTCDate().toString(), 2, "0") +
+          "T" +
+          padLeft(date.getUTCHours().toString(), 2, "0") +
+          padLeft(date.getUTCMinutes().toString(), 2, "0") +
+          padLeft(date.getUTCSeconds().toString(), 2, "0") +
+          "Z"
+        );
+      }
+
+      function addHours(date, hours) {
+        var out = new Date(date);
+        out.setTime(date.getTime() + hours * ONE_HOUR);
+        return out;
+      }
+
+      function generateICS(date) {
+        return [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:stream.wotos.eu",
+          "BEGIN:VEVENT",
+          "DTSTAMP:" + formatDateICS(new Date()),
+          "UID:" +
+            "sora-no-woto-" +
+            formatOrdinal(getAnniversary(date)) +
+            "-anniversary-stream-" +
+            date.getUTCFullYear().toString() +
+            "@stream.wotos.eu",
+          "DTSTART:" + formatDateICS(date),
+          "DTEND:" + formatDateICS(addHours(date, 7)),
+          "SUMMARY:" +
+            "Sora no Woto " +
+            formatOrdinal(getAnniversary(date)) +
+            " anniversary stream",
+          "URL:https://stream.wotos.eu",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].join("\r\n");
+      }
+
+      function start(date) {
+        document.getElementById("date-utc").textContent = formatDateUTC(date);
+        document.getElementById("date-local").textContent =
+          date.toLocaleDateString() + " at " + date.toLocaleTimeString();
+
+        var counterDiv = document.getElementById("counter");
+
+        counterDiv.textContent = elapsed(date);
+
+        setInterval(function () {
+          counterDiv.textContent = elapsed(date);
+        }, 1000);
+
+        var icsLink = document.getElementById("date-local-container");
+        icsLink.href =
+          "data:text/calendar;charset=utf8," +
+          encodeURIComponent(generateICS(date));
+        icsLink.setAttribute(
+          "download",
+          "Sora no Woto " +
+            formatOrdinal(getAnniversary(date)) +
+            " anniversary stream"
+        );
+
+        document.title =
+          "Sora no Woto " +
+          formatOrdinal(getAnniversary(date)) +
+          " anniversary stream";
+      }
+
+      var year = parseInt(
+        new URLSearchParams(window.location.search).get("y"),
+        10
+      );
+
+      if (!isNaN(year) && year >= 2010) {
+        start(findStreamDateOn(year));
+      } else {
+        start(findNextStreamDate());
+      }
+    </script>
+  </body>
+</html>
