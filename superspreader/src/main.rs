@@ -1,17 +1,22 @@
 mod irc_source;
 mod message;
 
-use clap::{App, Arg};
-use hyper::body::Bytes;
-use hyper::service::{make_service_fn, service_fn};
+use hyper::{
+    body::Bytes,
+    service::{make_service_fn, service_fn},
+};
 use irc::error::Result as IrcResult;
 use irc_source::{IrcSource, IrcSourceConfig};
 use log::{error, info};
 use message::Message;
 use simple_logger::SimpleLogger;
-use std::convert::Infallible;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{
+    convert::Infallible,
+    net::{Ipv4Addr, SocketAddr},
+    str::FromStr,
+    sync::Arc,
+};
+use structopt::StructOpt;
 use tokio::sync::broadcast;
 
 async fn handle_connection(
@@ -22,10 +27,7 @@ async fn handle_connection(
     tokio::spawn(async move {
         loop {
             let msg = receiver.recv().await.unwrap();
-            match body_sender
-                .send_data(Bytes::from(format!("{}", msg.message)))
-                .await
-            {
+            match body_sender.send_data(Bytes::from(msg.message)).await {
                 Ok(()) => (),
                 Err(err) if err.is_closed() => break,
                 _ => break,
@@ -81,6 +83,30 @@ async fn irc_loop(
     Ok(())
 }
 
+/// Superspreader connects to a channel on an IRC server
+/// and then starts an HTTP server that will stream the messages sent to the channel
+/// to all clients connected to it via chunked transfer encoding.
+#[derive(StructOpt)]
+struct Options {
+    #[structopt(long, default_value = "superspreader-bot")]
+    pub nick: String,
+
+    #[structopt(long)]
+    pub channel: String,
+
+    #[structopt(long)]
+    pub irc_server: String,
+
+    #[structopt(long)]
+    pub irc_port: Option<u16>,
+
+    #[structopt(long)]
+    pub address: String,
+
+    #[structopt(long)]
+    pub port: u16,
+}
+
 #[tokio::main]
 async fn main() {
     SimpleLogger::new()
@@ -88,72 +114,27 @@ async fn main() {
         .init()
         .unwrap();
 
-    let matches = App::new("superspreader")
-        .arg(
-            Arg::with_name("nick")
-                .long("nick")
-                .takes_value(true)
-                .default_value("superspreader-bot"),
-        )
-        .arg(
-            Arg::with_name("channel")
-                .long("channel")
-                .takes_value(true)
-                .required(true),
-        )
-        .arg(
-            Arg::with_name("irc-server")
-                .long("irc-server")
-                .takes_value(true)
-                .required(true),
-        )
-        .arg(
-            Arg::with_name("irc-port")
-                .long("irc-port")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("address")
-                .long("address")
-                .takes_value(true)
-                .required(true),
-        )
-        .arg(
-            Arg::with_name("port")
-                .long("port")
-                .takes_value(true)
-                .required(true),
-        )
-        .get_matches();
+    let opts = Options::from_args();
+
+    let bind_address =
+        SocketAddr::new(Ipv4Addr::from_str(&opts.address).unwrap().into(), opts.port);
 
     let sender: Arc<broadcast::Sender<Message>> = Arc::new(broadcast::channel(16).0);
 
+    info!("connecting to {} on {}", opts.channel, opts.irc_server);
     let irc_future = irc_loop(
         IrcSourceConfig {
-            nickname: matches.value_of("nick").unwrap().to_owned(),
+            nickname: opts.nick,
             password: None,
-            channel: matches.value_of("channel").unwrap().to_owned(),
-            server: matches.value_of("irc-server").unwrap().to_owned(),
-            port: matches
-                .value_of("irc-port")
-                .map(str::parse::<u16>)
-                .transpose()
-                .unwrap(),
+            channel: opts.channel,
+            server: opts.irc_server,
+            port: opts.irc_port,
         },
         Arc::clone(&sender),
     );
 
-    let addr = SocketAddr::from(
-        format!(
-            "{}:{}",
-            matches.value_of("address").unwrap(),
-            matches.value_of("port").unwrap()
-        )
-        .parse::<SocketAddr>()
-        .unwrap(),
-    );
-    info!("starting server on {}", addr);
-    let http_future = http_loop(&addr, Arc::clone(&sender));
+    info!("starting server on {}", bind_address);
+    let http_future = http_loop(&bind_address, Arc::clone(&sender));
 
     let (_, irc_future) = tokio::join!(http_future, irc_future);
     irc_future.unwrap();
