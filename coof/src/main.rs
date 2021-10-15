@@ -1,92 +1,107 @@
 use serde_json::json;
-use std::{
-    env,
-    io::{Result as IoResult, Write},
-    path::Path,
-    process::exit,
-};
+use std::io;
+use structopt::StructOpt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[cfg(windows)]
-use miow::pipe::NamedPipe;
+use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
+
 #[cfg(windows)]
-use std::{
-    fs::OpenOptions,
-    os::windows::{
-        fs::OpenOptionsExt,
-        io::{FromRawHandle, IntoRawHandle},
-    },
-};
+struct Kopipe(NamedPipeClient);
 
 #[cfg(unix)]
-use std::os::unix::net::UnixStream;
-
-#[cfg(windows)]
-struct Kopipe(NamedPipe);
+use tokio::net::UnixStream;
 
 #[cfg(unix)]
 struct Kopipe(UnixStream);
 
 impl Kopipe {
     #[cfg(windows)]
-    fn open<P: AsRef<Path>>(path: P) -> IoResult<Self> {
-        let mut opts = OpenOptions::new();
-        opts.read(false).write(true).custom_flags(0x40000000);
-        let file = opts.open(path)?;
-        Ok(Kopipe(unsafe {
-            NamedPipe::from_raw_handle(file.into_raw_handle())
-        }))
+    async fn open(path: &str) -> io::Result<Self> {
+        Ok(Kopipe(ClientOptions::new().open(path)?))
     }
 
     #[cfg(unix)]
-    fn open<P: AsRef<Path>>(path: P) -> IoResult<Self> {
-        Ok(Kopipe(UnixStream::connect(path)?))
+    async fn open(path: &str) -> io::Result<Self> {
+        Ok(Kopipe(UnixStream::connect(path).await?))
     }
 
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.0.write(buf)
+    async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf).await
     }
+
+    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf).await
+    }
+}
+
+#[derive(StructOpt)]
+struct Options {
+    #[structopt(long)]
+    pub server: String,
+
+    #[structopt(long)]
+    pub mpv_socket: String,
 }
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
+    simple_logger::SimpleLogger::new()
+        .with_level(log::LevelFilter::Debug)
+        .init()
+        .unwrap();
 
-    if args.len() != 3 {
-        eprintln!("Usage: {} <server> <mpv_socket>", args[0]);
-        exit(1);
-    }
+    let opts = Options::from_args();
 
-    let mut messages_resp = reqwest::get(&args[1])
+    let mut messages_resp = reqwest::get(&opts.server)
         .await
-        .map_err(|_| "Could not connect to the server")
-        .unwrap();
-    println!("Connected to the server on {}", args[1]);
+        .expect("Could not connect to the server");
+    log::info!("Connected to the server [address = {}]", opts.server);
 
-    let mut pipe = Kopipe::open(&args[2])
-        .map_err(|_| "Could not connect to mpv")
-        .unwrap();
-    println!("Connected to the mpv IPC socket on {}", args[2]);
+    let mut pipe = Kopipe::open(&opts.mpv_socket)
+        .await
+        .expect("Could not connect to mpv");
+    log::info!(
+        "Connected to the mpv IPC socket [path = {}]",
+        opts.mpv_socket
+    );
 
-    while let Some(chunk) = messages_resp.chunk().await.unwrap() {
-        if let Ok(message) = String::from_utf8(chunk.to_vec()) {
-            let cmd = json!({
-                "command": [
-                    "script-message-to",
-                    "coof",
-                    "danmaku-message",
-                    &message
-                ]
-            });
+    let mut read_buf = [0; 128];
+    loop {
+        tokio::select! {
+            chunk = messages_resp.chunk() => {
+                match chunk {
+                    Ok(Some(chunk)) => {
+                        if let Ok(message) = String::from_utf8(chunk.to_vec()) {
+                            let cmd = json!({
+                                "command": [
+                                    "script-message-to",
+                                    "coof",
+                                    "danmaku-message",
+                                    &message
+                                ]
+                            });
 
-            match pipe
-                .write(serde_json::to_vec(&cmd).unwrap().as_slice())
-                .and_then(|_| pipe.write(b"\n"))
-            {
-                Err(_) => {
-                    println!("mpv IPC socket closed");
-                    exit(0);
+                            pipe.write(&[serde_json::to_vec(&cmd).unwrap().as_slice(), b"\n"].concat())
+                                .await
+                                .expect("mpv IPC socket closed");
+
+                            log::debug!("Sent message: {}", message);
+                        }
+                    }
+                    _ => break
                 }
-                Ok(_) => (),
+            }
+
+            read = pipe.read(&mut read_buf) => {
+                match read {
+                    Ok(0) => break,
+                    Ok(read) => {
+                        let _ = std::str::from_utf8(&read_buf[..read])
+                            .map(|cmd| log::debug!("Received message: {}", cmd.trim()));
+                    }
+                    _ => break
+                }
             }
         }
     }
