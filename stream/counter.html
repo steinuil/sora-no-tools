@@ -51,6 +51,10 @@
         font-family: serif;
       }
 
+      #js-content {
+        display: none;
+      }
+
       .content {
         text-align: center;
         text-shadow: 0 0 2px black;
@@ -83,13 +87,19 @@
     </style>
   </head>
   <body>
-    <div class="content">
+    <noscript>
+      <div class="content">
+        <div class="see-you">See you next year!</div>
+        <span>Enable Javascript for more info</span>
+      </div>
+    </noscript>
+    <div class="content" id="js-content">
       <div class="see-you">See you on</div>
       <div class="date-utc">
-        <span id="date-utc">enable javascript, you baka</span>
+        <span id="date-utc"></span>
       </div>
       <a class="date-local" id="date-local-container">
-        (<span id="date-local"></span> in your timezone.)
+        (<span id="date-local"></span>)
       </a>
       <div class="counter-container">
         - <span class="counter" id="counter"></span> remain -
@@ -217,8 +227,6 @@
       }
 
       function joinAnd(arr) {
-        var out = "";
-
         if (arr.length === 1) return arr[0];
 
         return (
@@ -270,7 +278,7 @@
       }
 
       function addHours(date, hours) {
-        var out = new Date(date);
+        var out = new Date(date.getTime());
         out.setTime(date.getTime() + hours * ONE_HOUR);
         return out;
       }
@@ -302,8 +310,13 @@
 
       function start(date) {
         document.getElementById("date-utc").textContent = formatDateUTC(date);
+        // document.getElementById("date-utc").textContent =
+        // date.toLocaleDateString('ja-JP-u-ca-japanese', {'dateStyle': 'full'}) + " at " + date.toLocaleTimeString('ja-JP-u-ca-japanese-hc-h24', {'timeStyle': 'full'});
+
         document.getElementById("date-local").textContent =
-          date.toLocaleDateString() + " at " + date.toLocaleTimeString();
+          date.toLocaleDateString() +
+          " at " +
+          date.toLocaleTimeString([], { timeZoneName: "short" });
 
         var counterDiv = document.getElementById("counter");
 
@@ -340,6 +353,8 @@
       } else {
         start(findNextStreamDate());
       }
+
+      document.getElementById("js-content").style.display = "inline";
     </script>
   </body>
 </html>
